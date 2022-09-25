@@ -4,7 +4,9 @@ const User = require('../models/user');
 const express = require('express');
 const router = new express.Router();
 const ExpressError = require('../helpers/expressError');
+const jsonschema = require("jsonschema");
 const { authUser, requireLogin, requireAdmin } = require('../middleware/auth');
+const userUpdateSchema = require("../schemas/userUpdate.json");
 
 /** GET /
  *
@@ -15,7 +17,7 @@ const { authUser, requireLogin, requireAdmin } = require('../middleware/auth');
  *
  */
 
-router.get('/', authUser, requireLogin, async function(req, res, next) {
+router.get('/', authUser, requireLogin, async function (req, res, next) {
   try {
     let users = await User.getAll();
     return res.json({ users });
@@ -35,7 +37,7 @@ router.get('/', authUser, requireLogin, async function(req, res, next) {
  *
  */
 
-router.get('/:username', authUser, requireLogin, async function(
+router.get('/:username', authUser, requireLogin, async function (
   req,
   res,
   next
@@ -63,7 +65,7 @@ router.get('/:username', authUser, requireLogin, async function(
  *
  */
 
-router.patch('/:username', authUser, requireLogin, requireAdmin, async function(
+router.patch('/:username', authUser, requireLogin, requireAdmin, async function (
   req,
   res,
   next
@@ -76,6 +78,19 @@ router.patch('/:username', authUser, requireLogin, requireAdmin, async function(
     // get fields to change; remove token so we don't try to change it
     let fields = { ...req.body };
     delete fields._token;
+
+    /**
+     * Bug #5
+     * Validate json body .
+     * If user tries to update other fields (including non-existent ones), an error should be raised.
+     */
+
+    const validator = jsonschema.validate(fields, userUpdateSchema);
+    console.log(fields)
+    console.log(validator)
+    if (!validator.valid) {
+      throw new ExpressError("Bad request", 404);
+    }
 
     let user = await User.update(req.params.username, fields);
     return res.json({ user });
@@ -94,13 +109,14 @@ router.patch('/:username', authUser, requireLogin, requireAdmin, async function(
  * If user cannot be found, return a 404 err.
  */
 
-router.delete('/:username', authUser, requireAdmin, async function(
+router.delete('/:username', authUser, requireAdmin, async function (
   req,
   res,
   next
 ) {
   try {
-    User.delete(req.params.username);
+    // Bug #6 : Added 'await'
+    await User.delete(req.params.username);
     return res.json({ message: 'deleted' });
   } catch (err) {
     return next(err);
